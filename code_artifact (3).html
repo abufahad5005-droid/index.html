@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة تطعيم الطلاب الميداني</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        health: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                            800: '#115e59',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Cairo', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Font Cairo -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- HTML5 QR Code Scanner -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Cairo', sans-serif; }
+        .glass-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-teal-500 selection:text-white">
+
+    <!-- Top Navigation Header -->
+    <header class="glass-header sticky top-0 z-40 border-b border-slate-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo & Title -->
+                <div class="flex items-center space-x-3 space-x-reverse">
+                    <div class="bg-gradient-to-tr from-teal-600 to-blue-600 text-white p-2.5 rounded-xl shadow-md">
+                        <i class="fa-solid fa-user-graduate text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-extrabold text-lg sm:text-xl text-slate-900 tracking-tight leading-none">تطبيق تطعيم الطلاب الميداني</h1>
+                        <p class="text-xs text-slate-500 font-medium mt-1">ربط نموذج Google Form بالبوابة وعيادة التطعيم</p>
+                    </div>
+                </div>
+
+                <!-- Active Controls -->
+                <div class="flex items-center space-x-3 space-x-reverse">
+                    <!-- Network Status -->
+                    <div id="connectionStatus" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                        <span id="connectionText">متصل بالشبكة</span>
+                    </div>
+
+                    <!-- Fetch Google Sheets Data Button -->
+                    <button onclick="app.fetchDataFromGoogleSheets()" title="جلب تسجيلات الطلاب الجدد من Google Form" class="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-emerald-200 transition-all">
+                        <i class="fa-solid fa-cloud-arrow-down"></i>
+                        <span class="hidden sm:inline">مزامنة طلاب Google Form</span>
+                    </button>
+
+                    <!-- Staff Switcher -->
+                    <button onclick="app.openStaffModal()" class="hidden sm:flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-300 transition-all">
+                        <i class="fa-solid fa-user-gear text-teal-600"></i>
+                        <span id="activeStaffDisplay">الموظف: غير محدد</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Role Views Tab Bar -->
+        <div class="bg-slate-100/80 border-t border-slate-200 px-4 sm:px-8">
+            <div class="max-w-7xl mx-auto flex space-x-2 space-x-reverse overflow-x-auto py-2">
+                <button id="navTabReception" onclick="app.switchView('reception')" class="nav-tab active-tab flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all text-teal-700 bg-white shadow-sm border border-slate-200 whitespace-nowrap">
+                    <i class="fa-solid fa-torii-gate"></i>
+                    1. بوابة الدخول (الاستقبال)
+                    <span id="badgeReceptionWaiting" class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold ml-1">0</span>
+                </button>
+                
+                <button id="navTabClinic" onclick="app.switchView('clinic')" class="nav-tab flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all text-slate-600 hover:bg-white/60 whitespace-nowrap">
+                    <i class="fa-solid fa-syringe"></i>
+                    2. عيادة التطعيم (تأكيد اللقاح)
+                    <span id="badgeClinicQueue" class="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full font-bold ml-1">0</span>
+                </button>
+
+                <button id="navTabAll" onclick="app.switchView('all')" class="nav-tab flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all text-slate-600 hover:bg-white/60 whitespace-nowrap">
+                    <i class="fa-solid fa-table-list"></i>
+                    سجل الطلاب الشامل
+                </button>
+
+                <button id="navTabDashboard" onclick="app.switchView('dashboard')" class="nav-tab flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all text-slate-600 hover:bg-white/60 whitespace-nowrap">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    التقرير والإحصائيات
+                </button>
+
+                <button id="navTabSync" onclick="app.switchView('sync')" class="nav-tab flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all text-slate-600 hover:bg-white/60 whitespace-nowrap mr-auto">
+                    <i class="fa-solid fa-link text-emerald-600"></i>
+                    إعدادات Google Sheet
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+        <!-- Universal Search & QR Barcode Scanner -->
+        <section class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200">
+            <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+                <!-- Search Input Box -->
+                <div class="relative w-full md:w-2/3">
+                    <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
+                    <input type="text" id="globalSearchInput" oninput="app.handleSearch(this.value)" placeholder="ابحث برقم هوية الطالب أو الاسم الكامل..." 
+                           class="w-full pr-11 pl-10 py-3.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 text-base font-semibold outline-none transition-all">
+                    <button onclick="app.clearSearch()" id="clearSearchBtn" class="hidden absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                        <i class="fa-solid fa-circle-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- Barcode Scanner Trigger -->
+                <div class="flex gap-2 w-full md:w-auto justify-end">
+                    <button onclick="app.toggleCameraScanner()" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold px-5 py-3.5 rounded-xl shadow-sm transition-all active:scale-95">
+                        <i class="fa-solid fa-qrcode text-lg"></i>
+                        <span>مسح الهوية / QR</span>
+                    </button>
+                    <button onclick="app.openNewBeneficiaryModal()" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold px-4 py-3.5 rounded-xl border border-blue-200 transition-all">
+                        <i class="fa-solid fa-user-plus"></i>
+                        <span>إضافة طالب يدوي</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Embedded QR Scanner Container -->
+            <div id="scannerContainer" class="hidden mt-4 p-4 bg-slate-900 rounded-2xl text-center relative overflow-hidden shadow-inner">
+                <button onclick="app.closeScanner()" class="absolute top-3 left-3 z-10 bg-slate-800/80 text-white w-9 h-9 rounded-full hover:bg-red-600 transition-all flex items-center justify-center">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+                <p class="text-slate-300 text-xs mb-3 font-semibold">وجّه الكاميرا نحو باركود هوية الطالب أو اختر صورة تحتوي عليه</p>
+                <div id="interactiveScanner" class="max-w-md mx-auto rounded-xl overflow-hidden bg-black min-h-[220px]"></div>
+                
+                <div class="mt-3 flex justify-center">
+                    <label class="bg-slate-800 hover:bg-slate-700 text-teal-400 border border-teal-500/40 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-camera"></i>
+                        <span>اختر صورة تحتوي على الرمز</span>
+                        <input type="file" id="qrFileInput" accept="image/*" class="hidden" onchange="app.handleQrImageUpload(event)">
+                    </label>
+                </div>
+                <div id="scannerStatusText" class="mt-2 text-xs font-semibold text-teal-400">جاري التشغيل...</div>
+            </div>
+        </section>
+
+        <!-- 1. GATE RECEPTION VIEW -->
+        <section id="viewReception" class="app-view">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-torii-gate text-teal-600"></i>
+                        الخطوة 2: تسجيل الدخول عند البوابة (الاستقبال)
+                    </h2>
+                    <p class="text-xs text-slate-500">اختر الطالب المسجل مسبقاً في Google Form ثم اضغط "تأكيد الدخول من البوابة"</p>
+                </div>
+            </div>
+
+            <div id="receptionCardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- JS populated -->
+            </div>
+        </section>
+
+        <!-- 2. CLINIC VIEW -->
+        <section id="viewClinic" class="app-view hidden">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-syringe text-emerald-600"></i>
+                        الخطوة 3: عيادة التطعيم وتأكيد اللقاح
+                    </h2>
+                    <p class="text-xs text-slate-500">قائمة الطلاب الحاضرين بالبوابة المتبقي تطعيمهم</p>
+                </div>
+            </div>
+
+            <div id="clinicCardsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- JS populated -->
+            </div>
+        </section>
+
+        <!-- 3. ALL RECORDS VIEW -->
+        <section id="viewAll" class="app-view hidden">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 sm:p-6 border-b border-slate-200 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">الخطوة 4: التقرير الشامل والمزامنة مع Google Sheets</h2>
+                        <p class="text-xs text-slate-500">تتبع حالة كل طالب من التعبئة، الحضور بالبوابة، وإعادة المزامنة</p>
+                    </div>
+                    <button onclick="app.exportToCSV()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-2 rounded-xl border border-slate-300">
+                        <i class="fa-solid fa-download text-emerald-600"></i> تصدير CSV
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-right text-xs text-slate-600">
+                        <thead class="bg-slate-50 text-slate-700 uppercase font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-3.5">اسم الطالب / رقم الهوية</th>
+                                <th class="px-4 py-3.5">رقم الجوال</th>
+                                <th class="px-4 py-3.5">التاريخ المرضي</th>
+                                <th class="px-4 py-3.5">الدخول من البوابة</th>
+                                <th class="px-4 py-3.5">موظف البوابة</th>
+                                <th class="px-4 py-3.5">حالة التطعيم</th>
+                                <th class="px-4 py-3.5">الممارس الصحي</th>
+                                <th class="px-4 py-3.5 text-center">إجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allBeneficiariesTableBody" class="divide-y divide-slate-100">
+                            <!-- JS Populated -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. DASHBOARD VIEW -->
+        <section id="viewDashboard" class="app-view hidden space-y-6">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3.5 rounded-xl bg-slate-100 text-slate-700 text-xl"><i class="fa-solid fa-users"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-500">إجمالي طلاب Google Form</p>
+                        <h3 id="statTotal" class="text-2xl font-black text-slate-800">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3.5 rounded-xl bg-amber-100 text-amber-700 text-xl"><i class="fa-solid fa-torii-gate"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-500">دخلوا البوابة (بالانتظار)</p>
+                        <h3 id="statWaiting" class="text-2xl font-black text-amber-700">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3.5 rounded-xl bg-emerald-100 text-emerald-700 text-xl"><i class="fa-solid fa-syringe"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-500">تم تطعيمهم بنجاح</p>
+                        <h3 id="statVaccinated" class="text-2xl font-black text-emerald-700">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3.5 rounded-xl bg-slate-100 text-slate-500 text-xl"><i class="fa-solid fa-user-clock"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-500">لم يصلوا البوابة بعد</p>
+                        <h3 id="statAbsent" class="text-2xl font-black text-slate-600">0</h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4">نسبة إنجاز الحملة الميدانية</h3>
+                    <div class="h-64 relative"><canvas id="statusChart"></canvas></div>
+                </div>
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-800 mb-4">إنتاجية الفريق الطبي الميداني</h3>
+                    <div id="staffProductivityList" class="space-y-3"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. GOOGLE SHEETS SYNC SETTINGS VIEW -->
+        <section id="viewSync" class="app-view hidden space-y-6">
+            <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                <h2 class="text-lg font-bold text-slate-900 mb-2">إعدادات رابط Google Apps Script</h2>
+                <p class="text-xs text-slate-500 mb-4">ضع رابط تطبيق الويب الذي قمت بنشره (Deploy as Web App) لربط التسجيل بـ Google Sheet تلقائياً:</p>
+
+                <div class="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <input type="url" id="googleScriptUrl" placeholder="https://script.google.com/macros/s/AKfycbx.../exec" class="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-teal-500">
+                    <div class="flex gap-2">
+                        <button onclick="app.saveSyncSettings()" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2 rounded-lg text-xs">حفظ الرابط</button>
+                        <button onclick="app.fetchDataFromGoogleSheets()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg text-xs">اختبار وجلب بيانات الطلاب الآن</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal: Active Staff Config -->
+    <div id="modalStaffConfig" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
+            <h3 class="font-bold text-lg text-slate-900 border-b border-slate-100 pb-3">تحديد أسناء موظفي المناقلة الحالية</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">اسم موظف البوابة (الاستقبال):</label>
+                    <input type="text" id="receptionistNameInput" placeholder="أدخل اسمك الكريـم" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">اسم الممارس الصحي (اللقاح):</label>
+                    <input type="text" id="vaccinatorNameInput" placeholder="أدخل اسم الممرض" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs">
+                </div>
+            </div>
+            <div class="pt-2 flex justify-end">
+                <button onclick="app.saveStaffNames()" class="px-5 py-2 bg-teal-600 text-white font-bold text-xs rounded-lg">حفظ وتأكيد</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: New Student Manual Entry -->
+    <div id="modalNewBeneficiary" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <h3 class="font-bold text-lg text-slate-900">إضافة طالب ميدانياً (إذا لم يعبئ Google Form)</h3>
+            <form onsubmit="app.handleAddNewBeneficiary(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">اسم الطالب الكامل *</label>
+                    <input type="text" id="inputFullName" required placeholder="محمد أحمد..." class="w-full px-3 py-2 border rounded-lg text-xs">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">رقم الهوية *</label>
+                        <input type="text" id="inputIdNumber" required pattern="[0-9]{10}" placeholder="108xxxxxxx" class="w-full px-3 py-2 border rounded-lg text-xs">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">رقم الجوال *</label>
+                        <input type="tel" id="inputPhone" required placeholder="05xxxxxxxx" class="w-full px-3 py-2 border rounded-lg text-xs">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="app.closeNewBeneficiaryModal()" class="px-4 py-2 bg-slate-100 text-xs font-bold rounded-lg">إلغاء</button>
+                    <button type="submit" class="px-5 py-2 bg-teal-600 text-white text-xs font-bold rounded-lg">إضافة الطالب</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toastNotification" class="fixed bottom-5 left-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toastMessage">تم التحديث</span>
+    </div>
+
+    <script>
+        class StudentVaccinationApp {
+            constructor() {
+                this.beneficiaries = [];
+                this.pendingSyncQueue = [];
+                this.currentView = 'reception';
+                this.staff = {
+                    receptionist: 'موظف البوابة 1',
+                    vaccinator: 'د. خالد (الممارس الصحي)'
+                };
+                this.googleScriptUrl = localStorage.getItem('vax_google_script_url') || '';
+                this.html5QrCode = null;
+                this.isScanning = false;
+
+                this.init();
+            }
+
+            init() {
+                this.loadFromLocalStorage();
+                
+                if (this.beneficiaries.length === 0) {
+                    this.loadSampleData();
+                }
+
+                const savedStaff = localStorage.getItem('vax_staff_info');
+                if (savedStaff) this.staff = JSON.parse(savedStaff);
+                this.updateStaffDisplay();
+
+                const scriptUrlInput = document.getElementById('googleScriptUrl');
+                if (scriptUrlInput) scriptUrlInput.value = this.googleScriptUrl;
+
+                this.renderCurrentView();
+                this.updateBadges();
+
+                // Auto fetch from Google Sheets if URL configured
+                if (this.googleScriptUrl) {
+                    this.fetchDataFromGoogleSheets();
+                }
+            }
+
+            switchView(viewName) {
+                this.currentView = viewName;
+                document.querySelectorAll('.app-view').forEach(el => el.classList.add('hidden'));
+                document.querySelectorAll('.nav-tab').forEach(el => {
+                    el.classList.remove('active-tab', 'text-teal-700', 'bg-white', 'shadow-sm', 'border', 'border-slate-200');
+                    el.classList.add('text-slate-600');
+                });
+
+                const activeTab = document.getElementById(`navTab${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`);
+                if (activeTab) {
+                    activeTab.classList.add('active-tab', 'text-teal-700', 'bg-white', 'shadow-sm', 'border', 'border-slate-200');
+                }
+
+                const targetView = document.getElementById(`view${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`);
+                if (targetView) targetView.classList.remove('hidden');
+
+                this.renderCurrentView();
+            }
+
+            renderCurrentView() {
+                const searchVal = document.getElementById('globalSearchInput').value.trim();
+                
+                if (this.currentView === 'reception') this.renderReceptionCards(searchVal);
+                else if (this.currentView === 'clinic') this.renderClinicCards(searchVal);
+                else if (this.currentView === 'all') this.renderAllTable(searchVal);
+                else if (this.currentView === 'dashboard') this.renderDashboard();
+            }
+
+            // Step 2: Gate Check-in
+            renderReceptionCards(searchTerm = '') {
+                const container = document.getElementById('receptionCardsContainer');
+                if (!container) return;
+
+                let list = this.beneficiaries;
+                if (searchTerm) {
+                    list = list.filter(b => b.fullName.includes(searchTerm) || b.idNumber.includes(searchTerm));
+                }
+
+                if (list.length === 0) {
+                    container.innerHTML = `
+                        <div class="col-span-full text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300">
+                            <i class="fa-solid fa-users-slash text-slate-300 text-4xl mb-3"></i>
+                            <p class="text-slate-500 font-bold text-sm">لا يوجد طلاب يطابقون خيارات البحث</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = list.map(b => {
+                    const isPresent = b.Status_Attendance === 'تم الحضور';
+                    const isVaccinated = b.Vaccination_Status === 'تم التطعيم';
+
+                    return `
+                        <div class="rounded-2xl border ${isPresent ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200 bg-white'} p-5 shadow-sm flex flex-col justify-between">
+                            <div>
+                                <div class="flex justify-between items-start mb-2">
+                                    <h3 class="font-bold text-slate-900 text-base">${b.fullName}</h3>
+                                    <span class="px-2 py-0.5 text-[11px] font-extrabold rounded-full ${isPresent ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}">
+                                        ${isPresent ? 'دخل البوابة' : 'لم يصل البوابة'}
+                                    </span>
+                                </div>
+                                <div class="text-xs text-slate-500 font-mono mb-2"><i class="fa-solid fa-id-card"></i> ${b.idNumber}</div>
+                                <div class="text-xs text-slate-600 space-y-1">
+                                    <div><i class="fa-solid fa-phone text-slate-400"></i> ${b.phone}</div>
+                                    <div><i class="fa-solid fa-notes-medical text-amber-500"></i> ${b.medicalHistory || 'سليم'}</div>
+                                    ${b.Attendance_Time ? `<div class="text-teal-700 font-semibold"><i class="fa-solid fa-clock"></i> وقت الدخول: ${b.Attendance_Time}</div>` : ''}
+                                </div>
+                            </div>
+                            <div class="mt-4 pt-3 border-t border-slate-100">
+                                ${!isPresent ? `
+                                    <button onclick="app.markAttendance('${b.idNumber}')" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2">
+                                        <i class="fa-solid fa-torii-gate"></i> تأكيد الدخول من البوابة
+                                    </button>
+                                ` : `
+                                    <button onclick="app.toggleAttendance('${b.idNumber}')" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 px-3 rounded-xl text-xs">
+                                        إلغاء تسجيل البوابة
+                                    </button>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Step 3: Vaccination Clinic
+            renderClinicCards(searchTerm = '') {
+                const container = document.getElementById('clinicCardsContainer');
+                if (!container) return;
+
+                let list = this.beneficiaries.filter(b => b.Status_Attendance === 'تم الحضور');
+                if (searchTerm) {
+                    list = list.filter(b => b.fullName.includes(searchTerm) || b.idNumber.includes(searchTerm));
+                }
+
+                if (list.length === 0) {
+                    container.innerHTML = `
+                        <div class="col-span-full text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300">
+                            <i class="fa-solid fa-syringe text-slate-300 text-4xl mb-3"></i>
+                            <p class="text-slate-500 font-bold text-sm">لا يوجد طلاب بانتظار التطعيم في العيادة</p>
+                            <p class="text-xs text-slate-400 mt-1">تأكد من تأكيد دخول الطالب من البوابة أولاً</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = list.map(b => {
+                    const isVaccinated = b.Vaccination_Status === 'تم التطعيم';
+
+                    return `
+                        <div class="rounded-2xl border ${isVaccinated ? 'border-emerald-300 bg-emerald-50/30' : 'border-blue-200 bg-white'} p-5 shadow-sm flex flex-col justify-between">
+                            <div>
+                                <div class="flex justify-between items-start mb-2">
+                                    <h3 class="font-bold text-slate-900 text-base">${b.fullName}</h3>
+                                    <span class="px-2 py-0.5 text-[11px] font-extrabold rounded-full ${isVaccinated ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}">
+                                        ${isVaccinated ? 'تم التطعيم' : 'جاهز للتطعيم'}
+                                    </span>
+                                </div>
+                                <div class="text-xs text-slate-500 font-mono mb-2">الهوية: ${b.idNumber}</div>
+                                <div class="bg-amber-50 p-2 rounded-lg text-xs text-amber-900 mb-2">
+                                    <b>التاريخ المرضي:</b> ${b.medicalHistory || 'سليم'}
+                                </div>
+                                ${b.Vaccination_Time ? `<div class="text-xs text-emerald-700 font-bold"><i class="fa-solid fa-check"></i> وقت التطعيم: ${b.Vaccination_Time}</div>` : ''}
+                            </div>
+                            <div class="mt-4 pt-3 border-t border-slate-100">
+                                ${!isVaccinated ? `
+                                    <button onclick="app.markVaccinated('${b.idNumber}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2">
+                                        <i class="fa-solid fa-syringe"></i> تأكيد إعطاء اللقاح
+                                    </button>
+                                ` : `
+                                    <button onclick="app.toggleVaccination('${b.idNumber}')" class="w-full bg-slate-100 text-slate-700 font-semibold py-2 text-xs rounded-xl">
+                                        إلغاء حالة التطعيم
+                                    </button>
+                                `}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            renderAllTable(searchTerm = '') {
+                const tbody = document.getElementById('allBeneficiariesTableBody');
+                if (!tbody) return;
+
+                let list = this.beneficiaries;
+                if (searchTerm) {
+                    list = list.filter(b => b.fullName.includes(searchTerm) || b.idNumber.includes(searchTerm));
+                }
+
+                tbody.innerHTML = list.map(b => `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100">
+                        <td class="px-4 py-3 font-bold text-slate-900">${b.fullName}<div class="text-[10px] text-slate-400 font-mono">${b.idNumber}</div></td>
+                        <td class="px-4 py-3 font-mono">${b.phone}</td>
+                        <td class="px-4 py-3 text-slate-600">${b.medicalHistory || '-'}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${b.Status_Attendance === 'تم الحضور' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}">
+                                ${b.Status_Attendance || 'لم يحضر'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-slate-600">${b.Receptionist_Name || '-'}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${b.Vaccination_Status === 'تم التطعيم' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}">
+                                ${b.Vaccination_Status || 'بانتظار التطعيم'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-slate-600">${b.Vaccinator_Name || '-'}</td>
+                        <td class="px-4 py-3 text-center">
+                            <button onclick="app.deleteBeneficiary('${b.idNumber}')" class="text-slate-400 hover:text-red-600"><i class="fa-solid fa-trash-can"></i></button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            renderDashboard() {
+                const total = this.beneficiaries.length;
+                const waiting = this.beneficiaries.filter(b => b.Status_Attendance === 'تم الحضور' && b.Vaccination_Status !== 'تم التطعيم').length;
+                const vaccinated = this.beneficiaries.filter(b => b.Vaccination_Status === 'تم التطعيم').length;
+                const absent = this.beneficiaries.filter(b => b.Status_Attendance !== 'تم الحضور').length;
+
+                document.getElementById('statTotal').innerText = total;
+                document.getElementById('statWaiting').innerText = waiting;
+                document.getElementById('statVaccinated').innerText = vaccinated;
+                document.getElementById('statAbsent').innerText = absent;
+
+                const ctx = document.getElementById('statusChart');
+                if (ctx) {
+                    if (window.myStatusChart) window.myStatusChart.destroy();
+                    window.myStatusChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['لم يصلوا البوابة', 'دخلوا البوابة (بالانتظار)', 'تم التطعيم'],
+                            datasets: [{
+                                data: [absent, waiting, vaccinated],
+                                backgroundColor: ['#94a3b8', '#f59e0b', '#10b981'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false }
+                    });
+                }
+            }
+
+            markAttendance(idNumber) {
+                const target = this.beneficiaries.find(b => b.idNumber === idNumber);
+                if (!target) return;
+
+                const nowFormatted = new Date().toLocaleString('ar-SA', { hour12: true });
+                target.Status_Attendance = 'تم الحضور';
+                target.Attendance_Time = nowFormatted;
+                target.Receptionist_Name = this.staff.receptionist;
+
+                this.saveAndNotify('تم تسجيل دخول الطالب من البوابة بنجاح', {
+                    idNumber: idNumber,
+                    statusType: 'attendance',
+                    attendanceStatus: 'تم الحضور',
+                    attendanceTime: nowFormatted,
+                    receptionistName: this.staff.receptionist
+                });
+            }
+
+            toggleAttendance(idNumber) {
+                const target = this.beneficiaries.find(b => b.idNumber === idNumber);
+                if (!target) return;
+
+                target.Status_Attendance = 'لم يحضر';
+                target.Attendance_Time = '';
+                target.Receptionist_Name = '';
+
+                this.saveAndNotify('تم إلغاء تسجيل دخول البوابة', {
+                    idNumber: idNumber,
+                    statusType: 'attendance',
+                    attendanceStatus: 'لم يحضر',
+                    attendanceTime: '',
+                    receptionistName: ''
+                });
+            }
+
+            markVaccinated(idNumber) {
+                const target = this.beneficiaries.find(b => b.idNumber === idNumber);
+                if (!target) return;
+
+                const nowFormatted = new Date().toLocaleString('ar-SA', { hour12: true });
+                target.Vaccination_Status = 'تم التطعيم';
+                target.Vaccination_Time = nowFormatted;
+                target.Vaccinator_Name = this.staff.vaccinator;
+
+                this.saveAndNotify('تمت عملية التطعيم وتأكيد البيانات بنجاح', {
+                    idNumber: idNumber,
+                    statusType: 'vaccination',
+                    vaccinationStatus: 'تم التطعيم',
+                    vaccinationTime: nowFormatted,
+                    vaccinatorName: this.staff.vaccinator
+                });
+            }
+
+            toggleVaccination(idNumber) {
+                const target = this.beneficiaries.find(b => b.idNumber === idNumber);
+                if (!target) return;
+
+                target.Vaccination_Status = 'بانتظار التطعيم';
+                target.Vaccination_Time = '';
+                target.Vaccinator_Name = '';
+
+                this.saveAndNotify('تم إلغاء حالة التطعيم', {
+                    idNumber: idNumber,
+                    statusType: 'vaccination',
+                    vaccinationStatus: 'بانتظار التطعيم',
+                    vaccinationTime: '',
+                    vaccinatorName: ''
+                });
+            }
+
+            // Fetch live data registered via Google Forms
+            async fetchDataFromGoogleSheets() {
+                if (!this.googleScriptUrl) {
+                    this.showToast('يرجى تحديد رابط Google Apps Script أولاً', 'warning');
+                    return;
+                }
+
+                try {
+                    this.showToast('جاري جلب طلاب Google Form...');
+                    const res = await fetch(this.googleScriptUrl);
+                    const json = await res.json();
+
+                    if (json.status === 'success' && Array.isArray(json.data)) {
+                        // Merge fetched data with local beneficiaries
+                        json.data.forEach(fetchedStudent => {
+                            const index = this.beneficiaries.findIndex(b => b.idNumber === fetchedStudent.idNumber);
+                            if (index >= 0) {
+                                // Update existing record
+                                this.beneficiaries[index] = { ...this.beneficiaries[index], ...fetchedStudent };
+                            } else {
+                                // Add new student registered via Google Form
+                                this.beneficiaries.push(fetchedStudent);
+                            }
+                        });
+
+                        this.saveToLocalStorage();
+                        this.renderCurrentView();
+                        this.updateBadges();
+                        this.showToast(`تمت المزامنة بنجاح! إجمالي الطلاب: ${this.beneficiaries.length}`);
+                    }
+                } catch (e) {
+                    console.error("Fetch error:", e);
+                    this.showToast('تعذر الجلب المباشر، تأكد من إعدادات الرابط', 'warning');
+                }
+            }
+
+            toggleCameraScanner() {
+                const container = document.getElementById('scannerContainer');
+                if (this.isScanning) { this.closeScanner(); return; }
+
+                container.classList.remove('hidden');
+                this.isScanning = true;
+
+                if (!this.html5QrCode) this.html5QrCode = new Html5Qrcode("interactiveScanner");
+
+                this.html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    (decodedText) => {
+                        document.getElementById('globalSearchInput').value = decodedText;
+                        this.handleSearch(decodedText);
+                        this.closeScanner();
+                        this.showToast(`تم مسح الهوية: ${decodedText}`);
+                    },
+                    (err) => {}
+                ).catch(() => {
+                    document.getElementById('scannerStatusText').innerText = "يمكنك اختيار صورة تحتوي الرمز من الأزرار أعلاه.";
+                });
+            }
+
+            async handleQrImageUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                if (!this.html5QrCode) this.html5QrCode = new Html5Qrcode("interactiveScanner");
+
+                try {
+                    const decodedText = await this.html5QrCode.scanFile(file, true);
+                    document.getElementById('globalSearchInput').value = decodedText;
+                    this.handleSearch(decodedText);
+                    this.closeScanner();
+                    this.showToast(`تم قراءة الهوية من الصورة: ${decodedText}`);
+                } catch (err) {
+                    this.showToast('لم يتم العثور على رمز واضح في الصورة', 'warning');
+                }
+            }
+
+            closeScanner() {
+                if (this.html5QrCode && this.isScanning) {
+                    this.html5QrCode.stop().then(() => {
+                        this.isScanning = false;
+                        document.getElementById('scannerContainer').classList.add('hidden');
+                    }).catch(() => {
+                        this.isScanning = false;
+                        document.getElementById('scannerContainer').classList.add('hidden');
+                    });
+                } else {
+                    document.getElementById('scannerContainer').classList.add('hidden');
+                }
+            }
+
+            handleSearch(query) {
+                const clearBtn = document.getElementById('clearSearchBtn');
+                if (clearBtn) clearBtn.classList.toggle('hidden', query.length === 0);
+                this.renderCurrentView();
+            }
+
+            clearSearch() {
+                document.getElementById('globalSearchInput').value = '';
+                this.handleSearch('');
+            }
+
+            saveAndNotify(message, syncPayload) {
+                this.saveToLocalStorage();
+                this.updateBadges();
+                this.renderCurrentView();
+                this.showToast(message);
+
+                if (syncPayload && this.googleScriptUrl) {
+                    fetch(this.googleScriptUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'updateStatus', ...syncPayload })
+                    });
+                }
+            }
+
+            handleAddNewBeneficiary(e) {
+                e.preventDefault();
+                const fullName = document.getElementById('inputFullName').value.trim();
+                const idNumber = document.getElementById('inputIdNumber').value.trim();
+                const phone = document.getElementById('inputPhone').value.trim();
+
+                if (this.beneficiaries.some(b => b.idNumber === idNumber)) {
+                    this.showToast('رقم الهوية مدخل مسبقاً!', 'warning');
+                    return;
+                }
+
+                this.beneficiaries.unshift({
+                    fullName, idNumber, phone, medicalHistory: 'سليم',
+                    Status_Attendance: 'لم يحضر', Vaccination_Status: 'بانتظار التطعيم'
+                });
+
+                this.closeNewBeneficiaryModal();
+                this.saveAndNotify('تم إضافة الطالب بنجاح');
+            }
+
+            deleteBeneficiary(idNumber) {
+                this.beneficiaries = this.beneficiaries.filter(b => b.idNumber !== idNumber);
+                this.saveAndNotify('تم حذف السجل بنجاح');
+            }
+
+            openNewBeneficiaryModal() { document.getElementById('modalNewBeneficiary').classList.remove('hidden'); }
+            closeNewBeneficiaryModal() { document.getElementById('modalNewBeneficiary').classList.add('hidden'); }
+            openStaffModal() { document.getElementById('modalStaffConfig').classList.remove('hidden'); }
+            
+            saveStaffNames() {
+                const r = document.getElementById('receptionistNameInput').value.trim();
+                const v = document.getElementById('vaccinatorNameInput').value.trim();
+                if (r) this.staff.receptionist = r;
+                if (v) this.staff.vaccinator = v;
+                localStorage.setItem('vax_staff_info', JSON.stringify(this.staff));
+                this.updateStaffDisplay();
+                document.getElementById('modalStaffConfig').classList.add('hidden');
+                this.showToast('تم حفظ بيانات الفريق الطبي');
+            }
+
+            updateStaffDisplay() {
+                const el = document.getElementById('activeStaffDisplay');
+                if (el) el.innerText = `البوابة: ${this.staff.receptionist} | العيادة: ${this.staff.vaccinator}`;
+            }
+
+            saveSyncSettings() {
+                const url = document.getElementById('googleScriptUrl').value.trim();
+                this.googleScriptUrl = url;
+                localStorage.setItem('vax_google_script_url', url);
+                this.showToast('تم حفظ رابط Google Apps Script');
+                this.fetchDataFromGoogleSheets();
+            }
+
+            updateBadges() {
+                const waitingCount = this.beneficiaries.filter(b => b.Status_Attendance === 'لم يحضر').length;
+                const clinicQueue = this.beneficiaries.filter(b => b.Status_Attendance === 'تم الحضور' && b.Vaccination_Status !== 'تم التطعيم').length;
+                document.getElementById('badgeReceptionWaiting').innerText = waitingCount;
+                document.getElementById('badgeClinicQueue').innerText = clinicQueue;
+            }
+
+            showToast(msg, type = 'success') {
+                const toast = document.getElementById('toastNotification');
+                const toastMsg = document.getElementById('toastMessage');
+                const toastIcon = document.getElementById('toastIcon');
+
+                if (!toast) return;
+                toastMsg.innerText = msg;
+                toastIcon.className = type === 'warning' ? "fa-solid fa-triangle-exclamation text-amber-400 text-lg" : "fa-solid fa-circle-check text-emerald-400 text-lg";
+
+                toast.classList.remove('translate-y-20', 'opacity-0');
+                setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+            }
+
+            loadSampleData() {
+                this.beneficiaries = [
+                    { fullName: "محمد بن علي المنصور", idNumber: "1082394812", phone: "0551234567", medicalHistory: "سليم", Status_Attendance: "لم يحضر", Vaccination_Status: "بانتظار التطعيم" },
+                    { fullName: "سارة عبد الرحمن الشهري", idNumber: "1094821034", phone: "0509876543", medicalHistory: "حساسية بنسلين", Status_Attendance: "تم الحضور", Attendance_Time: "10:15 ص", Receptionist_Name: "موظف البوابة 1", Vaccination_Status: "بانتظار التطعيم" },
+                    { fullName: "فهد خالد العتيبي", idNumber: "1059382019", phone: "0543321100", medicalHistory: "ربو خفيف", Status_Attendance: "تم الحضور", Attendance_Time: "09:40 ص", Receptionist_Name: "موظف البوابة 1", Vaccination_Status: "تم التطعيم", Vaccination_Time: "09:55 ص", Vaccinator_Name: "د. خالد (الممارس الصحي)" }
+                ];
+                this.saveToLocalStorage();
+            }
+
+            saveToLocalStorage() { localStorage.setItem('vax_beneficiaries_data', JSON.stringify(this.beneficiaries)); }
+            loadFromLocalStorage() {
+                const stored = localStorage.getItem('vax_beneficiaries_data');
+                if (stored) { try { this.beneficiaries = JSON.parse(stored); } catch(e){} }
+            }
+        }
+
+        let app;
+        window.onload = function() { app = new StudentVaccinationApp(); };
+    </script>
+</body>
+</html>
